@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jobram — Job Application Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Animated backdrop: drifting aurora blobs + live particle field -->
+<div class="aurora">
+  <span class="blob blob-a"></span>
+  <span class="blob blob-b"></span>
+  <span class="blob blob-c"></span>
+</div>
+<canvas id="bgCanvas"></canvas>
+<canvas id="confettiCanvas"></canvas>
+
+<div class="app">
+
+  <!-- ===== Header ===== -->
+  <header class="masthead">
+    <div class="masthead-left">
+      <div class="stamp"><span>JT</span></div>
+      <div>
+        <h1>Jobram</h1>
+        <p class="tagline">Track every application, in motion.</p>
+      </div>
+    </div>
+    <div class="masthead-right">
+      <button class="btn btn-ghost" id="exportJsonBtn">Export backup</button>
+      <label class="btn btn-ghost" for="importJsonInput">Import backup</label>
+      <input type="file" id="importJsonInput" accept="application/json" hidden>
+      <button class="btn btn-ghost" id="exportCsvBtn">Export CSV</button>
+      <button class="btn btn-primary" id="addJobBtn">+ Log application</button>
+    </div>
+  </header>
+
+  <!-- ===== Pipeline strip (signature element) ===== -->
+  <section class="pipeline-strip" id="pipelineStrip" aria-label="Applications by stage">
+    <!-- filled by JS: segmented funnel bar -->
+  </section>
+
+  <!-- ===== Dashboard ===== -->
+  <section class="dashboard">
+    <div class="stat-card">
+      <span class="stat-number" id="statTotal">0</span>
+      <span class="stat-label">Total applications</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-number" id="statActive">0</span>
+      <span class="stat-label">Active pipeline</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-number" id="statInterviews">0</span>
+      <span class="stat-label">In interview stage</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-number" id="statOffers">0</span>
+      <span class="stat-label">Offers</span>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-card-head">
+        <h2>Status breakdown</h2>
+        <span class="seal">at a glance</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="statusPie"></canvas>
+      </div>
+      <div class="legend" id="pieLegend"></div>
+    </div>
+
+    <div class="followup-card">
+      <div class="chart-card-head">
+        <h2>Follow-ups</h2>
+        <span class="seal">next up</span>
+      </div>
+      <ul class="followup-list" id="followupList">
+        <!-- filled by JS -->
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===== Toolbar ===== -->
+  <section class="toolbar">
+    <input type="search" id="searchInput" placeholder="Search company or role…" class="search-input">
+    <select id="statusFilter" class="filter-select">
+      <option value="">All statuses</option>
+    </select>
+    <select id="sourceFilter" class="filter-select">
+      <option value="">All sources</option>
+    </select>
+    <button class="btn btn-ghost" id="clearFiltersBtn">Clear filters</button>
+  </section>
+
+  <!-- ===== Table ===== -->
+  <section class="table-wrap">
+    <table id="jobTable">
+      <thead>
+        <tr>
+          <th data-sort="company">Company</th>
+          <th data-sort="jobTitle">Role</th>
+          <th data-sort="dateApplied">Applied</th>
+          <th data-sort="source">Source</th>
+          <th data-sort="peopleContacted">Contacts</th>
+          <th data-sort="status">Status</th>
+          <th data-sort="interviewStage">Interview stage</th>
+          <th data-sort="lastContact">Last contact</th>
+          <th data-sort="nextFollowUp">Next follow-up</th>
+          <th data-sort="ctc">CTC / Salary</th>
+          <th>Notes</th>
+          <th class="col-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="jobTableBody">
+        <!-- filled by JS -->
+      </tbody>
+    </table>
+    <div class="empty-state" id="emptyState">
+      <p>Nothing logged yet.</p>
+      <p class="empty-sub">Every search starts with the first entry. Click "Log application" to begin your ledger.</p>
+    </div>
+  </section>
+
+</div>
+
+<!-- ===== Modal: Add/Edit job ===== -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-head">
+      <h2 id="modalTitle">Log application</h2>
+      <button class="modal-close" id="modalCloseBtn" aria-label="Close">&times;</button>
+    </div>
+    <form id="jobForm">
+      <input type="hidden" id="jobId">
+
+      <div class="form-grid">
+        <div class="field">
+          <label for="company">Company *</label>
+          <input type="text" id="company" required>
+        </div>
+        <div class="field">
+          <label for="jobTitle">Job title *</label>
+          <input type="text" id="jobTitle" required>
+        </div>
+        <div class="field field-wide">
+          <label for="jobLink">Job link</label>
+          <input type="url" id="jobLink" placeholder="https://…">
+        </div>
+        <div class="field">
+          <label for="dateApplied">Date applied</label>
+          <input type="date" id="dateApplied">
+        </div>
+        <div class="field">
+          <label for="source">Source</label>
+          <input type="text" id="source" list="sourceOptions" placeholder="LinkedIn, Referral…">
+          <datalist id="sourceOptions">
+            <option value="LinkedIn">
+            <option value="Naukri">
+            <option value="Company Website">
+            <option value="Referral">
+            <option value="Indeed">
+            <option value="Wellfound / AngelList">
+            <option value="Other">
+          </datalist>
+        </div>
+        <div class="field field-wide">
+          <label for="peopleContacted">People contacted</label>
+          <input type="text" id="peopleContacted" placeholder="Recruiter name, hiring manager…">
+        </div>
+        <div class="field">
+          <label for="status">Status</label>
+          <select id="status">
+            <option>Applied</option>
+            <option>Under Review</option>
+            <option>Interview Scheduled</option>
+            <option>Interviewing</option>
+            <option>Offer Received</option>
+            <option>Rejected</option>
+            <option>Withdrawn</option>
+            <option>Ghosted</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="interviewStage">Interview stage</label>
+          <select id="interviewStage">
+            <option>N/A</option>
+            <option>Screening</option>
+            <option>Technical Round</option>
+            <option>Assignment / Task</option>
+            <option>Managerial Round</option>
+            <option>HR Round</option>
+            <option>Final Round</option>
+            <option>Offer</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="lastContact">Last contact</label>
+          <input type="date" id="lastContact">
+        </div>
+        <div class="field">
+          <label for="nextFollowUp">Next follow-up</label>
+          <input type="date" id="nextFollowUp">
+        </div>
+        <div class="field">
+          <label for="ctc">CTC / Salary</label>
+          <input type="text" id="ctc" placeholder="e.g. 12 LPA or $95k">
+        </div>
+        <div class="field field-wide">
+          <label for="notes">Notes</label>
+          <textarea id="notes" rows="3" placeholder="Anything worth remembering…"></textarea>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="cancelBtn">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="saveBtn">Save entry</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="script.js"></script>
+<footer style="text-align: center; width: 100%;">
+  Built and designed by Arumilli Abhiram
+</footer>
+</body>
+</html>
